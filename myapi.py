@@ -12,6 +12,7 @@ class APIError(RuntimeError):
 
 
 def _load_hf_token() -> Optional[str]:
+    # Prefer env vars for deployments (Streamlit Cloud, Docker, CI, etc.)
     token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
     if token:
         return token.strip() or None
@@ -56,6 +57,18 @@ class API:
             self._client = InferenceClient(api_key=self._token)
         return self._client
 
+    def _wrap_hf_exception(self, feature: str, e: Exception) -> APIError:
+        msg = str(e) or e.__class__.__name__
+        lower = msg.lower()
+        if "401" in lower or "unauthorized" in lower or "invalid username or password" in lower:
+            return APIError(
+                "Hugging Face authorization failed (401). "
+                "On Streamlit Cloud, set app Secrets: HF_TOKEN=\"hf_...\". "
+                "Locally, set environment variable HF_TOKEN. "
+                "Also ensure the token is valid and has permission to use inference."
+            )
+        return APIError(f"Hugging Face {feature} request failed: {msg}")
+
     def perform_ner(self, text: str) -> str:
         text = (text or "").strip()
         if not text:
@@ -64,7 +77,7 @@ class API:
         try:
             result = self._get_client().token_classification(text, model=self.NER_MODEL)
         except Exception as e:
-            raise APIError(f"Hugging Face NER request failed: {e}") from e
+            raise self._wrap_hf_exception("NER", e) from e
 
         if not result:
             return "No entities detected."
@@ -92,7 +105,7 @@ class API:
         try:
             result = self._get_client().text_classification(text, model=self.EMOTION_MODEL)
         except Exception as e:
-            raise APIError(f"Hugging Face emotion request failed: {e}") from e
+            raise self._wrap_hf_exception("emotion", e) from e
 
         top = None
         if isinstance(result, list) and result:

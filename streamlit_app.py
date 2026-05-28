@@ -90,6 +90,10 @@ except Exception:
 
 api = API()
 
+with st.sidebar:
+    has_token = bool(os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN"))
+    st.caption(f"HF token configured: {'Yes' if has_token else 'No'}")
+
 # -----------------------------------
 # Header
 # -----------------------------------
