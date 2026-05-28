@@ -4,3 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+*.env
+secret.py
+.streamlit/secrets.toml
+database.json

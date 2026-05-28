@@ -1,31 +1,113 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from typing import Any, Optional
+
 from huggingface_hub import InferenceClient
 
-from secret import HF_TOKEN
+
+class APIError(RuntimeError):
+    """User-safe API error for UI display."""
+
+
+def _load_hf_token() -> Optional[str]:
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+    if token:
+        return token.strip() or None
+
+    # Optional local development fallback: `secret.py` with `HF_TOKEN = "..."`.
+    # This file must be gitignored and never committed.
+    try:
+        import importlib
+
+        secret = importlib.import_module("secret")
+        value = getattr(secret, "HF_TOKEN", None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    except Exception:
+        return None
+
+    return None
+
+
+@dataclass(frozen=True)
+class EmotionResult:
+    emotion: str
+    confidence: float
 
 
 class API:
+    NER_MODEL = "dslim/bert-base-NER"
+    EMOTION_MODEL = "j-hartmann/emotion-english-distilroberta-base"
 
-    def __init__(self):
+    def __init__(self, token: Optional[str] = None):
+        self._token = (token or _load_hf_token() or "").strip() or None
+        self._client: Optional[InferenceClient] = None
 
-        self.client = InferenceClient(api_key=HF_TOKEN)
+    def _get_client(self) -> InferenceClient:
+        if not self._token:
+            raise APIError(
+                "Missing Hugging Face token. Set env var HF_TOKEN (recommended) "
+                "or create a local secret.py with HF_TOKEN, but never commit it."
+            )
+        if self._client is None:
+            # Correct usage for deployment: InferenceClient(api_key=HF_TOKEN)
+            self._client = InferenceClient(api_key=self._token)
+        return self._client
 
+    def perform_ner(self, text: str) -> str:
+        text = (text or "").strip()
+        if not text:
+            raise APIError("Please enter some text for Named Entity Recognition.")
 
-    def perform_ner(self, text):
+        try:
+            result = self._get_client().token_classification(text, model=self.NER_MODEL)
+        except Exception as e:
+            raise APIError(f"Hugging Face NER request failed: {e}") from e
 
-        result = self.client.token_classification(text, model="dslim/bert-base-NER")
+        if not result:
+            return "No entities detected."
 
-        entities = []
+        entities: list[str] = []
+        for item in result if isinstance(result, list) else []:
+            if not isinstance(item, dict):
+                continue
+            word = item.get("word") or item.get("entity") or ""
+            group = item.get("entity_group") or item.get("entity") or ""
+            word = str(word).strip()
+            group = str(group).strip()
+            if word and group:
+                entities.append(f"{word} : {group}")
+            elif word:
+                entities.append(word)
 
-        for item in result:
+        return "\n".join(entities) if entities else "No entities detected."
 
-            entities.append(f"{item.word} : {item.entity_group}")
+    def perform_emotion_detection(self, text: str) -> dict[str, Any]:
+        text = (text or "").strip()
+        if not text:
+            raise APIError("Please enter some text for Emotion Detection.")
 
-        return "\n".join(entities)
+        try:
+            result = self._get_client().text_classification(text, model=self.EMOTION_MODEL)
+        except Exception as e:
+            raise APIError(f"Hugging Face emotion request failed: {e}") from e
 
-    def perform_emotion_detection(self, text):
+        top = None
+        if isinstance(result, list) and result:
+            top = result[0]
 
-        result = self.client.text_classification(
-            text, model="j-hartmann/emotion-english-distilroberta-base"
-        )
+        if not isinstance(top, dict):
+            return {"emotion": "unknown", "confidence": 0.0}
 
-        return {"emotion": result[0].label, "confidence": round(result[0].score, 2)}
+        label = top.get("label")
+        score = top.get("score")
+
+        emotion = str(label).strip() if isinstance(label, str) and label.strip() else "unknown"
+        try:
+            confidence = float(score) if score is not None else 0.0
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        return {"emotion": emotion, "confidence": round(confidence, 2)}

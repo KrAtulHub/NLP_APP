@@ -1,7 +1,8 @@
 from tkinter import *
 from tkinter import messagebox
+import threading
 from mydb import Database
-from myapi import API
+from myapi import API, APIError
 
 
 class NLP_App:
@@ -220,27 +221,55 @@ class NLP_App:
         )
         self.ner_result.pack(pady=20)
 
+        self.ner_status = Label(
+            self.root,
+            text="",
+            font=("Arial", 11, "italic"),
+            bg="#f0f0f0",
+            fg="#555555",
+        )
+        self.ner_status.pack(pady=(0, 10))
+
         Button(self.root, text="Go Back", command=self.home_gui).pack()
 
     def analyze_ner(self):
 
         text = self.ner_input.get()
 
-        if text == "":
-
+        if text.strip() == "":
             messagebox.showerror("Error", "Please enter text")
-
             return
 
-        try:
+        self.ner_status.config(text="Processing...")
+        self.ner_result.config(text="")
 
-            result = self.api.perform_ner(text)
+        def worker():
+            try:
+                result = self.api.perform_ner(text)
 
-            self.ner_result.config(text=result)
+                def on_success():
+                    self.ner_result.config(text=result)
+                    self.ner_status.config(text="")
 
-        except Exception as e:
+                self.root.after(0, on_success)
+            except APIError as e:
 
-            self.ner_result.config(text=str(e))
+                def on_error():
+                    self.ner_result.config(text=str(e))
+                    self.ner_status.config(text="")
+
+                self.root.after(0, on_error)
+            except Exception:
+
+                def on_error():
+                    self.ner_result.config(
+                        text="Something went wrong while analyzing text. Please try again."
+                    )
+                    self.ner_status.config(text="")
+
+                self.root.after(0, on_error)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def perform_emotion_detection(self):
 
@@ -270,29 +299,59 @@ class NLP_App:
         )
         self.emotion_result.pack(pady=20)
 
+        self.emotion_status = Label(
+            self.root,
+            text="",
+            font=("Arial", 11, "italic"),
+            bg="#f0f0f0",
+            fg="#555555",
+        )
+        self.emotion_status.pack(pady=(0, 10))
+
         Button(self.root, text="Go Back", command=self.home_gui).pack()
 
     def analyze_emotion(self):
 
         text = self.emotion_input.get()
 
-        if text == "":
-
+        if text.strip() == "":
             messagebox.showerror("Error", "Please enter text")
-
             return
 
-        try:
+        self.emotion_status.config(text="Processing...")
+        self.emotion_result.config(text="")
 
-            result = self.api.perform_emotion_detection(text)
+        def worker():
+            try:
+                result = self.api.perform_emotion_detection(text)
+                emotion = result.get("emotion", "unknown")
+                confidence = result.get("confidence", 0.0)
 
-            self.emotion_result.config(
-                text=f"Emotion : {result['emotion']}\nConfidence : {result['confidence']}"
-            )
+                def on_success():
+                    self.emotion_result.config(
+                        text=f"Emotion : {emotion}\nConfidence : {confidence}"
+                    )
+                    self.emotion_status.config(text="")
 
-        except Exception as e:
+                self.root.after(0, on_success)
+            except APIError as e:
 
-            self.emotion_result.config(text=str(e))
+                def on_error():
+                    self.emotion_result.config(text=str(e))
+                    self.emotion_status.config(text="")
+
+                self.root.after(0, on_error)
+            except Exception:
+
+                def on_error():
+                    self.emotion_result.config(
+                        text="Something went wrong while analyzing text. Please try again."
+                    )
+                    self.emotion_status.config(text="")
+
+                self.root.after(0, on_error)
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 nlp = NLP_App()

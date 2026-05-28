@@ -1,5 +1,6 @@
 
 import streamlit as st
+import os
 from myapi import API
 
 # -----------------------------------
@@ -80,6 +81,12 @@ html, body, [class*="css"] {
 # -----------------------------------
 # API Object
 # -----------------------------------
+
+try:
+    if "HF_TOKEN" in st.secrets and st.secrets["HF_TOKEN"]:
+        os.environ["HF_TOKEN"] = str(st.secrets["HF_TOKEN"])
+except Exception:
+    pass
 
 api = API()
 
