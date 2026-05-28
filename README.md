@@ -1,7 +1,5 @@
 ## NLP_APP — Natural Language Processing Application
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://kratulhub-nlp-app-streamlit-app-o9zdgb.streamlit.app/)
-
 [**Live demo**](https://kratulhub-nlp-app-streamlit-app-o9zdgb.streamlit.app/)
 
 [![NLP_APP banner](resources/banner.png)](https://kratulhub-nlp-app-streamlit-app-o9zdgb.streamlit.app/)
